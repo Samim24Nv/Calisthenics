@@ -99,6 +99,12 @@
                 <div class="target-list" id="today-targets"></div>
                 <button class="btn-primary" onclick="startSession()">Lock In</button>
                 <button id="btn-advance" class="btn-primary btn-secondary" onclick="advanceProtocol()" disabled>Advance Protocol</button>
+                
+                <div id="failsafe-prompt" style="display:none; margin-top: 15px; padding-top: 15px; border-top: 1px solid var(--border);">
+                    <p style="color: var(--warning); font-size: 0.9rem; font-weight: bold; margin-bottom: 10px; text-align: center;">⚠️ Interrupted Session Detected</p>
+                    <button class="btn-primary" style="background: var(--warning); color: #000; padding: 12px; font-size: 1rem;" onclick="resumeFailsafe()">Resume Session</button>
+                    <button class="btn-secondary danger-btn" style="margin-top: 10px; padding: 10px;" onclick="purgeFailsafe()">Purge Corrupted Data</button>
+                </div>
             </div>
         </div>
 
@@ -112,7 +118,7 @@
                 <span>⏱ <span id="session-timer" class="session-timer-text">00:00</span></span>
             </div>
             <div id="session-stage" class="stage-container"></div>
-            <button class="btn-primary btn-secondary" onclick="abortSession()" style="margin-top: 30px;">Abort (Crash Out)</button>
+            <button class="btn-primary btn-secondary" onclick="requestAbort()" style="margin-top: 30px;">Abort (Crash Out)</button>
         </div>
 
         <div id="view-progressions" class="view">
@@ -169,6 +175,21 @@
         let activeSession = { exercises: [], currentExIndex: 0, currentSet: 1, timer: null, timeLeft: 0, logs: {}, globalTimer: null, elapsedSeconds: 0, holdTimer: null, holdSeconds: 0 };
         let audioCtx = null;
 
+        // Hardware Interception Protocol
+        window.addEventListener('popstate', function(event) {
+            if (document.body.classList.contains('in-session')) {
+                history.pushState({ session: true }, ""); 
+                requestAbort();
+            }
+        });
+
+        window.addEventListener('beforeunload', function(event) {
+            if (document.body.classList.contains('in-session')) {
+                event.preventDefault();
+                event.returnValue = '';
+            }
+        });
+
         function initAudio() {
             if(!audioCtx) {
                 const AudioContext = window.AudioContext || window.webkitAudioContext;
@@ -182,32 +203,31 @@
                 if(!audioCtx) return;
                 const osc = audioCtx.createOscillator();
                 const gainNode = audioCtx.createGain();
-                
-                osc.type = type;
-                osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
-                
+                osc.type = type; osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
                 gainNode.gain.setValueAtTime(vol, audioCtx.currentTime);
                 gainNode.gain.setValueAtTime(vol, audioCtx.currentTime + duration - 0.05);
                 gainNode.gain.linearRampToValueAtTime(0, audioCtx.currentTime + duration);
-                
-                osc.connect(gainNode);
-                gainNode.connect(audioCtx.destination);
-                
-                osc.start();
-                osc.stop(audioCtx.currentTime + duration);
+                osc.connect(gainNode); gainNode.connect(audioCtx.destination);
+                osc.start(); osc.stop(audioCtx.currentTime + duration);
             } catch(e) {}
         }
 
         function loadState() {
-            state.cycle = parseInt(safeGet('cali_v7_cycle', '1')) || 1;
-            state.loopIndex = parseInt(safeGet('cali_v7_loopIndex', '0')) || 0;
-            state.history = safeParse('cali_v7_history', []);
-            state.canAdvance = safeGet('cali_v7_canAdvance', 'false') === 'true';
-            state.lastRest = parseInt(safeGet('cali_v7_lastRest', '120')) || 120;
+            state.cycle = parseInt(safeGet('cali_v8_cycle', '1')) || 1;
+            state.loopIndex = parseInt(safeGet('cali_v8_loopIndex', '0')) || 0;
+            state.history = safeParse('cali_v8_history', []);
+            state.canAdvance = safeGet('cali_v8_canAdvance', 'false') === 'true';
+            state.lastRest = parseInt(safeGet('cali_v8_lastRest', '120')) || 120;
         }
 
         function initApp() {
-            try { loadState(); updateTodayUI(); renderHistory(); renderProgressions(); } 
+            try { 
+                loadState(); 
+                updateTodayUI(); 
+                renderHistory(); 
+                renderProgressions(); 
+                checkFailsafe();
+            } 
             catch (e) { document.getElementById('current-workout').innerText = "SYSTEM ERROR"; }
         }
 
@@ -228,10 +248,9 @@
         function exportVault() {
             const dataStr = JSON.stringify(state);
             const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
-            const exportFileDefaultName = `calisthenics_vault_cycle_${state.cycle}.json`;
             const linkElement = document.createElement('a');
             linkElement.setAttribute('href', dataUri);
-            linkElement.setAttribute('download', exportFileDefaultName);
+            linkElement.setAttribute('download', `calisthenics_vault_cycle_${state.cycle}.json`);
             linkElement.click();
         }
 
@@ -339,12 +358,62 @@
             return `${m}:${s}`;
         }
 
-        function startSessionTimer() {
-            activeSession.elapsedSeconds = 0; clearInterval(activeSession.globalTimer);
-            document.getElementById('session-timer').innerText = "00:00";
+        // --- THE FAILSAFE VAULT PROTOCOL ---
+        function checkFailsafe() {
+            const savedState = safeParse('cali_v8_failsafe', null);
+            if(savedState && savedState.exercises && savedState.exercises.length > 0) {
+                document.getElementById('failsafe-prompt').style.display = 'block';
+            }
+        }
+
+        function triggerVaultSave() {
+            // Strip out intervals/timers to prevent recursion errors when serializing
+            const serializedSession = {
+                exercises: activeSession.exercises,
+                currentExIndex: activeSession.currentExIndex,
+                currentSet: activeSession.currentSet,
+                logs: activeSession.logs,
+                elapsedSeconds: activeSession.elapsedSeconds
+            };
+            safeSet('cali_v8_failsafe', JSON.stringify(serializedSession));
+        }
+
+        function purgeFailsafe() {
+            safeClear('cali_v8_failsafe');
+            document.getElementById('failsafe-prompt').style.display = 'none';
+        }
+
+        function resumeFailsafe() {
+            const savedState = safeParse('cali_v8_failsafe', null);
+            if(!savedState) return;
+            
+            document.getElementById('failsafe-prompt').style.display = 'none';
+            initAudio();
+            history.pushState({ session: true }, "");
+            document.body.classList.add('in-session');
+            document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+            document.getElementById('view-session').classList.add('active');
+            document.getElementById('session-type').innerText = PLPCR_LOOP[state.loopIndex].toUpperCase();
+            
+            // Re-hydrate state
+            activeSession.exercises = savedState.exercises;
+            activeSession.currentExIndex = savedState.currentExIndex;
+            activeSession.currentSet = savedState.currentSet;
+            activeSession.logs = savedState.logs || {};
+            activeSession.elapsedSeconds = savedState.elapsedSeconds || 0;
+            
+            startSessionTimer(true);
+            renderActiveSet();
+        }
+
+        function startSessionTimer(isResume = false) {
+            if(!isResume) activeSession.elapsedSeconds = 0; 
+            clearInterval(activeSession.globalTimer);
+            document.getElementById('session-timer').innerText = formatTime(activeSession.elapsedSeconds);
             activeSession.globalTimer = setInterval(() => {
                 activeSession.elapsedSeconds++;
                 document.getElementById('session-timer').innerText = formatTime(activeSession.elapsedSeconds);
+                if(activeSession.elapsedSeconds % 10 === 0) triggerVaultSave(); // Micro-save every 10 seconds
             }, 1000);
         }
 
@@ -355,14 +424,16 @@
         }
 
         function startSession() {
-            initAudio();
+            initAudio(); 
+            history.pushState({ session: true }, ""); // Hardware trap
             const currentType = PLPCR_LOOP[state.loopIndex];
             document.body.classList.add('in-session');
             document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
             document.getElementById('view-session').classList.add('active');
             document.getElementById('session-type').innerText = currentType.toUpperCase();
             
-            activeSession.logs = {}; startSessionTimer();
+            activeSession.logs = {}; 
+            startSessionTimer();
             
             if(currentType === 'Rest') {
                 document.getElementById('session-progress').innerText = "Protocol: Recovery";
@@ -375,6 +446,8 @@
                 return { name: ex.name, totalSets: parsed.sets, targetReps: parsed.reps, isHold: parsed.isHold };
             });
             activeSession.currentExIndex = 0; activeSession.currentSet = 1;
+            
+            triggerVaultSave(); // Lock in initial state
             renderWarmUp();
         }
 
@@ -430,14 +503,7 @@
         
         function startHoldPrep(targetSeconds) {
             let prepTime = 5;
-            const stage = document.getElementById('session-stage');
-
-            stage.innerHTML = `
-                <div class="exercise-title" style="color: var(--warning);">LOCK IN</div>
-                <div class="timer-display" id="prep-timer" style="color: var(--warning);">00:05</div>
-                <div class="target-rep-display">Assuming posture in 5 seconds...</div>
-                <div style="margin-top: 25px; text-align: center;"><span onclick="cancelHold()" style="color: var(--text-muted); font-size: 0.95rem; text-decoration: underline; cursor: pointer;">Abort</span></div>
-            `;
+            document.getElementById('session-stage').innerHTML = `<div class="exercise-title" style="color: var(--warning);">LOCK IN</div><div class="timer-display" id="prep-timer" style="color: var(--warning);">00:05</div><div class="target-rep-display">Assuming posture in 5 seconds...</div><div style="margin-top: 25px; text-align: center;"><span onclick="cancelHold()" style="color: var(--text-muted); font-size: 0.95rem; text-decoration: underline; cursor: pointer;">Abort</span></div>`;
 
             clearInterval(activeSession.holdTimer);
             activeSession.holdTimer = setInterval(() => {
@@ -459,40 +525,21 @@
 
         function startHoldActive(targetSeconds) {
             activeSession.holdSeconds = 0;
-            const stage = document.getElementById('session-stage');
-            
-            stage.innerHTML = `
-                <div class="exercise-title" style="color: var(--accent);">HOLD THE LINE</div>
-                <div class="timer-display" id="active-hold-timer">00:00</div>
-                <div class="target-rep-display">Target: ${targetSeconds}s</div>
-                <button class="btn-primary" style="background: var(--danger); color: #fff; margin-top: 20px;" onclick="stopHold()">STOP & LOG</button>
-            `;
+            document.getElementById('session-stage').innerHTML = `<div class="exercise-title" style="color: var(--accent);">HOLD THE LINE</div><div class="timer-display" id="active-hold-timer">00:00</div><div class="target-rep-display">Target: ${targetSeconds}s</div><button class="btn-primary" style="background: var(--danger); color: #fff; margin-top: 20px;" onclick="stopHold()">STOP & LOG</button>`;
 
             activeSession.holdTimer = setInterval(() => {
                 activeSession.holdSeconds++;
                 const el = document.getElementById('active-hold-timer');
                 if (el) {
                     el.innerText = formatTime(activeSession.holdSeconds);
-                    if (activeSession.holdSeconds >= targetSeconds) {
-                        el.style.color = 'var(--accent)';
-                    } else {
-                        el.style.color = 'var(--text-main)';
-                    }
+                    if (activeSession.holdSeconds >= targetSeconds) el.style.color = 'var(--accent)';
+                    else el.style.color = 'var(--text-main)';
                 }
             }, 1000);
         }
 
-        function stopHold() {
-            clearInterval(activeSession.holdTimer);
-            renderLogScreen();
-            const inputEl = document.getElementById('rep-input');
-            if (inputEl) inputEl.value = activeSession.holdSeconds;
-        }
-
-        function cancelHold() {
-            clearInterval(activeSession.holdTimer);
-            renderLogScreen();
-        }
+        function stopHold() { clearInterval(activeSession.holdTimer); renderLogScreen(); const inputEl = document.getElementById('rep-input'); if (inputEl) inputEl.value = activeSession.holdSeconds; }
+        function cancelHold() { clearInterval(activeSession.holdTimer); renderLogScreen(); }
 
         function processLog() {
             const inputEl = document.getElementById('rep-input');
@@ -510,12 +557,19 @@
             activeSession.logs[ex.name].reps.push(val);
 
             if (activeSession.currentSet < ex.totalSets) {
-                activeSession.currentSet++; startRestTimer(state.lastRest);
+                activeSession.currentSet++; 
+                triggerVaultSave();
+                startRestTimer(state.lastRest);
             } else {
                 activeSession.currentExIndex++;
                 if (activeSession.currentExIndex < activeSession.exercises.length) {
-                    activeSession.currentSet = 1; startRestTimer(state.lastRest);
-                } else { renderWorkoutComplete(); }
+                    activeSession.currentSet = 1; 
+                    triggerVaultSave();
+                    startRestTimer(state.lastRest);
+                } else { 
+                    triggerVaultSave();
+                    renderWorkoutComplete(); 
+                }
             }
         }
 
@@ -532,13 +586,11 @@
                 const exName = prevEx.name;
                 if (activeSession.logs[exName]) activeSession.logs[exName].reps.pop();
             }
+            triggerVaultSave();
             renderLogScreen();
         }
 
-        function setRestTime(seconds) {
-            state.lastRest = seconds; saveData();
-            startRestTimer(seconds);
-        }
+        function setRestTime(seconds) { state.lastRest = seconds; saveData(); startRestTimer(seconds); }
 
         function startRestTimer(seconds) {
             activeSession.timeLeft = seconds;
@@ -546,18 +598,13 @@
             clearInterval(activeSession.timer);
             
             const timerEl = document.getElementById('timer-text');
-            
             activeSession.timer = setInterval(() => {
                 activeSession.timeLeft--;
                 if(timerEl) {
                     timerEl.innerText = formatTime(activeSession.timeLeft);
-                    if (activeSession.timeLeft <= 3 && activeSession.timeLeft > 0) {
-                        timerEl.style.color = 'var(--warning)';
-                    } else if (activeSession.timeLeft <= 0) {
-                        timerEl.style.color = 'var(--danger)';
-                    } else {
-                        timerEl.style.color = 'var(--accent)';
-                    }
+                    if (activeSession.timeLeft <= 3 && activeSession.timeLeft > 0) timerEl.style.color = 'var(--warning)';
+                    else if (activeSession.timeLeft <= 0) timerEl.style.color = 'var(--danger)';
+                    else timerEl.style.color = 'var(--accent)';
                 }
 
                 if(activeSession.timeLeft <= 3 && activeSession.timeLeft > 0) {
@@ -582,12 +629,8 @@
         function addTime(seconds) { 
             activeSession.timeLeft += seconds; 
             const el = document.getElementById('timer-text');
-            if (el) {
-                el.innerText = formatTime(activeSession.timeLeft); 
-                el.style.color = 'var(--accent)';
-            }
+            if (el) { el.innerText = formatTime(activeSession.timeLeft); el.style.color = 'var(--accent)'; }
         }
-        
         function skipRest() { clearInterval(activeSession.timer); renderActiveSet(); }
 
         function renderWorkoutComplete() {
@@ -595,8 +638,15 @@
             document.getElementById('session-stage').innerHTML = `<div class="exercise-title" style="color: var(--accent);">Session Annihilated</div><div class="target-rep-display">All mandatory sets complete.</div><button class="btn-primary" onclick="finishActiveSession()">Return to Base</button>`;
         }
 
+        function requestAbort() {
+            if(confirm("CRASH OUT WARNING: Are you sure you want to abort this session? Your telemetry will be purged.")) {
+                abortSession();
+            }
+        }
+
         function abortSession() {
             clearInterval(activeSession.timer); clearInterval(activeSession.globalTimer); clearInterval(activeSession.holdTimer);
+            localStorage.removeItem('cali_v8_failsafe'); // Purge vault on intended exit
             document.body.classList.remove('in-session');
             document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
             document.getElementById('view-today').classList.add('active');
@@ -614,7 +664,10 @@
             state.history.unshift({ cycle: state.cycle, type: workoutDone, date: timestamp, duration: duration, logs: sessionLogs });
             state.canAdvance = true;
             
-            saveData(); abortSession(); updateTodayUI(); renderHistory(); renderProgressions();
+            saveData(); 
+            localStorage.removeItem('cali_v8_failsafe'); // Purge vault on clean extraction
+            abortSession(); 
+            updateTodayUI(); renderHistory(); renderProgressions();
         }
 
         function renderProgressions() {
@@ -670,9 +723,9 @@
         }
 
         function saveData() {
-            safeSet('cali_v7_cycle', state.cycle); safeSet('cali_v7_loopIndex', state.loopIndex);
-            safeSet('cali_v7_history', JSON.stringify(state.history)); safeSet('cali_v7_canAdvance', state.canAdvance);
-            safeSet('cali_v7_lastRest', state.lastRest);
+            safeSet('cali_v8_cycle', state.cycle); safeSet('cali_v8_loopIndex', state.loopIndex);
+            safeSet('cali_v8_history', JSON.stringify(state.history)); safeSet('cali_v8_canAdvance', state.canAdvance);
+            safeSet('cali_v8_lastRest', state.lastRest);
         }
 
         window.addEventListener('DOMContentLoaded', initApp);
