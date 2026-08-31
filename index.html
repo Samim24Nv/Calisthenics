@@ -1,0 +1,681 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>PLPCR Matrix Engine</title>
+    
+    <meta name="theme-color" content="#0a0a0a">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="mobile-web-app-capable" content="yes">
+    <link rel="manifest" href='data:application/manifest+json,{"name":"CaliMatrix","short_name":"Matrix","display":"standalone","background_color":"#0a0a0a","theme_color":"#00ff88"}'>
+
+    <style>
+        :root {
+            --bg-base: #0a0a0a;
+            --bg-surface: #171717;
+            --accent: #00ff88;
+            --danger: #ff4444;
+            --warning: #ffb700;
+            --text-main: #f5f5f5;
+            --text-muted: #737373;
+            --border: #262626;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', system-ui, sans-serif; -webkit-tap-highlight-color: transparent; }
+        body { background-color: var(--bg-base); color: var(--text-main); display: flex; flex-direction: column; height: 100vh; overflow: hidden; user-select: none; }
+        
+        header { padding: 20px; border-bottom: 1px solid var(--border); background-color: var(--bg-surface); text-align: center; text-transform: uppercase; letter-spacing: 2px; font-weight: 800; padding-top: max(20px, env(safe-area-inset-top)); }
+        
+        main { flex: 1; overflow-y: auto; padding: 20px; padding-bottom: calc(80px + env(safe-area-inset-bottom)); }
+        .view { display: none; animation: fadeIn 0.3s ease; }
+        .view.active { display: block; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        h2 { font-size: 1.5rem; margin-bottom: 15px; color: var(--accent); }
+        .card { background: var(--bg-surface); border: 1px solid var(--border); border-radius: 8px; padding: 15px; margin-bottom: 15px; }
+        
+        .cycle-display { font-size: 2.5rem; font-weight: 900; margin: 10px 0; text-align: center; text-transform: uppercase; }
+        .cycle-number { color: var(--text-muted); font-size: 1rem; text-align: center; margin-bottom: -5px; }
+        
+        .target-list { margin: 20px 0; background: var(--bg-base); border: 1px solid var(--border); border-radius: 8px; padding: 10px; }
+        .target-item { display: flex; justify-content: space-between; padding: 10px; border-bottom: 1px solid var(--border); font-weight: 600; }
+        .target-item:last-child { border-bottom: none; }
+        
+        .btn-primary { display: block; width: 100%; padding: 18px; background: var(--accent); color: #000; border: none; border-radius: 8px; font-size: 1.2rem; font-weight: 800; cursor: pointer; text-transform: uppercase; margin-top: 15px; transition: transform 0.1s; }
+        .btn-primary:active { transform: scale(0.98); }
+        .btn-primary:disabled { opacity: 0.3; cursor: not-allowed; }
+        .btn-secondary { background: transparent; color: var(--text-muted); border: 1px solid var(--border); margin-top: 10px; }
+
+        .session-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+        .session-meta { display: flex; justify-content: space-between; font-size: 0.95rem; color: var(--text-muted); margin-bottom: 15px; font-weight: 700; }
+        .session-timer-text { color: var(--accent); font-variant-numeric: tabular-nums; }
+        
+        .stage-container { background: var(--bg-surface); border: 1px solid var(--border); border-radius: 8px; padding: 20px; text-align: center; min-height: 250px; display: flex; flex-direction: column; justify-content: center; position: relative; }
+        
+        .exercise-title { font-size: 1.8rem; font-weight: 900; color: var(--accent); margin-bottom: 5px; }
+        .target-rep-display { font-size: 1.1rem; color: var(--text-main); margin-bottom: 5px; font-weight: bold; }
+        .past-rep-display { font-size: 0.9rem; color: var(--text-muted); margin-bottom: 25px; }
+        
+        .log-input { width: 100%; background: var(--bg-base); border: 2px solid var(--border); color: var(--text-main); padding: 15px; border-radius: 8px; font-size: 1.5rem; text-align: center; outline: none; margin-bottom: 20px; font-weight: bold; transition: border-color 0.3s; }
+        .log-input:focus { border-color: var(--accent); }
+        
+        .timer-display { font-size: 4rem; font-weight: 900; letter-spacing: 2px; color: var(--accent); margin: 20px 0; font-variant-numeric: tabular-nums; transition: color 0.3s ease; }
+        .timer-controls { display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap; justify-content: center; }
+        .timer-btn { flex: 1; min-width: 60px; padding: 12px; background: var(--bg-base); border: 1px solid var(--border); color: var(--text-main); border-radius: 8px; font-weight: bold; cursor: pointer; }
+        .timer-btn.active-rest { border-color: var(--accent); color: var(--accent); }
+        .timer-btn:active { background: var(--border); }
+
+        .accordion { border: 1px solid var(--border); border-radius: 8px; margin-bottom: 10px; overflow: hidden; }
+        .accordion-header { background: var(--bg-surface); padding: 15px; cursor: pointer; display: flex; justify-content: space-between; font-weight: 700; }
+        .accordion-body { padding: 15px; background: var(--bg-base); display: none; border-top: 1px solid var(--border); }
+        .accordion.open .accordion-body { display: block; }
+        .prog-item { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 0.95rem; }
+        .prog-item:last-child { border-bottom: none; }
+        .locked { color: var(--text-muted); }
+        .unlocked { color: var(--text-main); font-weight: 600; }
+
+        .history-item { padding: 15px; background: var(--bg-surface); border-radius: 8px; margin-bottom: 10px; border-left: 4px solid var(--accent); }
+        .history-log-row { display: flex; justify-content: space-between; font-size: 0.9rem; margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border); font-weight: bold; }
+        
+        nav { position: fixed; bottom: 0; width: 100%; display: flex; background: var(--bg-surface); border-top: 1px solid var(--border); z-index: 10; padding-bottom: env(safe-area-inset-bottom); }
+        .nav-item { flex: 1; padding: 15px; text-align: center; color: var(--text-muted); font-weight: 600; cursor: pointer; transition: color 0.2s; }
+        .nav-item.active { color: var(--accent); border-top: 2px solid var(--accent); }
+        body.in-session nav { display: none; }
+        
+        .danger-btn { background: transparent; border: 1px solid var(--danger); color: var(--danger); padding: 10px; border-radius: 6px; width: 100%; margin-top: 30px; font-weight: bold; cursor: pointer; }
+    </style>
+</head>
+<body>
+
+    <header>Calisthenics Tracker</header>
+
+    <main>
+        <div id="view-today" class="view active">
+            <h2>The Battlefront</h2>
+            <div class="card">
+                <div class="cycle-number" id="cycle-count">Cycle 1</div>
+                <div class="cycle-display" id="current-workout">LOADING...</div>
+                <div class="target-list" id="today-targets"></div>
+                <button class="btn-primary" onclick="startSession()">Lock In</button>
+                <button id="btn-advance" class="btn-primary btn-secondary" onclick="advanceProtocol()" disabled>Advance Protocol</button>
+            </div>
+        </div>
+
+        <div id="view-session" class="view">
+            <div class="session-header">
+                <h2>Active Protocol</h2>
+                <span id="session-type" style="color: var(--text-muted); font-weight: bold;"></span>
+            </div>
+            <div class="session-meta">
+                <span id="session-progress">Initializing...</span>
+                <span>⏱ <span id="session-timer" class="session-timer-text">00:00</span></span>
+            </div>
+            <div id="session-stage" class="stage-container"></div>
+            <button class="btn-primary btn-secondary" onclick="abortSession()" style="margin-top: 30px;">Abort (Crash Out)</button>
+        </div>
+
+        <div id="view-progressions" class="view">
+            <h2>Skill Trees</h2>
+            <div id="trees-container"></div>
+        </div>
+
+        <div id="view-history" class="view">
+            <h2>Autopsy Report</h2>
+            <div id="history-list"></div>
+            
+            <div style="display: flex; gap: 10px; margin-top: 20px;">
+                <button class="btn-primary" style="flex:1; margin-top:0; font-size:1rem;" onclick="exportVault()">📥 Export JSON</button>
+                <button class="btn-primary" style="flex:1; margin-top:0; font-size:1rem;" onclick="document.getElementById('import-file').click()">📤 Import JSON</button>
+                <input type="file" id="import-file" style="display:none" accept=".json" onchange="importVault(event)">
+            </div>
+            
+            <button class="danger-btn" onclick="factoryReset()">⚠️ Factory Reset App Data</button>
+        </div>
+    </main>
+
+    <nav>
+        <div class="nav-item" onclick="switchTab('progressions', this)">Trees</div>
+        <div class="nav-item active" onclick="switchTab('today', this)">Today</div>
+        <div class="nav-item" onclick="switchTab('history', this)">History</div>
+    </nav>
+
+    <script>
+        function safeGet(key, fallback) { try { return localStorage.getItem(key) || fallback; } catch(e) { return fallback; } }
+        function safeParse(key, fallback) { try { return JSON.parse(localStorage.getItem(key)) || fallback; } catch(e) { return fallback; } }
+        function safeSet(key, val) { try { localStorage.setItem(key, val); } catch(e) {} }
+        function safeClear() { try { localStorage.clear(); } catch(e) {} }
+
+        const PLPCR_LOOP = ['Push', 'Leg', 'Pull', 'Core', 'Rest'];
+        
+        const SKILL_TREES = [
+            { category: 'Push', name: "Handstand Push-Up", levels: ["Standard Push-ups|3x15", "Hindu Push-ups|3x7 & Floor Pike Push-ups|3x7 & Tripod Headstand|3x20s", "Advanced Pike Push-ups|3x7 & Hollow Body Hold|3x30s", "Chest-to-Wall Handstand|3x20s & Pirouette Bail|3x5", "Freestanding Handstand|3x20s", "Wall HSPU Negatives|3x7", "Wall Strict HSPU|3x7", "Freestanding HSPU|3x7"] },
+            { category: 'Push', name: "1-Arm Push-Up", levels: ["Diamond Push-ups|3x15", "Archer Push-ups|3x7", "Uneven / Fingertip Archer|3x7", "Incline 1-Arm Push-ups|3x7", "Floor 1-Arm Negatives|3x7", "1-Arm Push-ups|3x7"] },
+            { category: 'Leg', name: "Pistol Squat", levels: ["Normal Squats|3x20", "Lunges|3x10", "Archer Squats|3x10", "Bulgarian Split Squats|3x10", "Assisted Pistol Squats|3x7", "Pistol Squat Negatives|3x7", "Pistol Squats|3x7"] },
+            { category: 'Core', name: "L-Sit", levels: ["Hollow Body Hold|3x30s", "Leg Raises|3x10 & Scapula Dips|3x10", "Adv. Leg Raises|3x10 & Adv. Scapula Dips|3x10", "Tuck L-Sit|3x20s", "Straddle L-Sit|3x20s", "Full L-Sit|3x30s"] },
+            { category: 'Core', name: "Dragon Flag", levels: ["Hollow Hold|3x30s & Lying Leg Raises|3x7", "Tuck Reverse Crunches|3x7", "Straight-Leg Reverse Crunches|3x7", "Tuck Dragon Flag Hold|3x20s", "1-Leg Dragon Flag Hold|3x20s", "Full Dragon Flag Negatives|3x7", "Full Dragon Flag Hold|3x20s"] },
+            { category: 'Pull', name: "Muscle Up", levels: ["Pull-ups|3x7", "High Pull-ups|3x7 & Straight Dips|3x7", "Jumping Muscle Ups|3x7", "Tuck-in Muscle Up|3x7", "Strict Muscle Up|3x7"] },
+            { category: 'Pull', name: "1-Arm Pull-Up", levels: ["Pull-ups|3x7", "Archer Pull-ups|3x7 & 1-Arm Active Hang|3x20s", "1-Arm Top Hold|3x20s & 1-Arm Negatives|3x7", "1-Arm Pull-Up|3x7"] }
+        ];
+
+        const WARMUP_MAP = {
+            'Push': [{name: 'Wrist Leans & Finger Pulses', target: '60s'}, {name: 'Arm Circles & Tricep Ext.', target: '15 reps'}, {name: 'Scapular Push-ups', target: '10 reps'}],
+            'Pull': [{name: 'Wrist Leans & Finger Pulses', target: '60s'}, {name: 'Dynamic Arm Circles', target: '15 reps'}, {name: 'Scapular Pull-ups', target: '10 reps'}],
+            'Leg': [{name: 'Deep ATG Squat Hold', target: '60s'}, {name: 'Dynamic Cossack Squats', target: '10/leg'}],
+            'Core': [{name: 'Cobra Pose Stretch', target: '45s'}, {name: 'Cat-Cow Transitions', target: '10 reps'}]
+        };
+
+        let state = { cycle: 1, loopIndex: 0, history: [], canAdvance: false, lastRest: 120 };
+        let activeSession = { exercises: [], currentExIndex: 0, currentSet: 1, timer: null, timeLeft: 0, logs: {}, globalTimer: null, elapsedSeconds: 0, holdTimer: null, holdSeconds: 0 };
+        let audioCtx = null;
+
+        function initAudio() {
+            if(!audioCtx) {
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                if(AudioContext) audioCtx = new AudioContext();
+            }
+            if(audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+        }
+
+        function playBeep(freq, duration, type = 'square', vol = 1.0) {
+            try {
+                if(!audioCtx) return;
+                const osc = audioCtx.createOscillator();
+                const gainNode = audioCtx.createGain();
+                
+                osc.type = type;
+                osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+                
+                gainNode.gain.setValueAtTime(vol, audioCtx.currentTime);
+                gainNode.gain.setValueAtTime(vol, audioCtx.currentTime + duration - 0.05);
+                gainNode.gain.linearRampToValueAtTime(0, audioCtx.currentTime + duration);
+                
+                osc.connect(gainNode);
+                gainNode.connect(audioCtx.destination);
+                
+                osc.start();
+                osc.stop(audioCtx.currentTime + duration);
+            } catch(e) {}
+        }
+
+        function loadState() {
+            state.cycle = parseInt(safeGet('cali_v7_cycle', '1')) || 1;
+            state.loopIndex = parseInt(safeGet('cali_v7_loopIndex', '0')) || 0;
+            state.history = safeParse('cali_v7_history', []);
+            state.canAdvance = safeGet('cali_v7_canAdvance', 'false') === 'true';
+            state.lastRest = parseInt(safeGet('cali_v7_lastRest', '120')) || 120;
+        }
+
+        function initApp() {
+            try { loadState(); updateTodayUI(); renderHistory(); renderProgressions(); } 
+            catch (e) { document.getElementById('current-workout').innerText = "SYSTEM ERROR"; }
+        }
+
+        function switchTab(tabId, el) {
+            if(document.body.classList.contains('in-session')) return;
+            document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+            document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+            document.getElementById(`view-${tabId}`).classList.add('active');
+            el.classList.add('active');
+        }
+
+        function toggleAccordion(el) { el.classList.toggle('open'); }
+        
+        function factoryReset() {
+            if(confirm("Nuke all data and reset the app? This cannot be undone.")) { safeClear(); location.reload(); }
+        }
+
+        function exportVault() {
+            const dataStr = JSON.stringify(state);
+            const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+            const exportFileDefaultName = `calisthenics_vault_cycle_${state.cycle}.json`;
+            const linkElement = document.createElement('a');
+            linkElement.setAttribute('href', dataUri);
+            linkElement.setAttribute('download', exportFileDefaultName);
+            linkElement.click();
+        }
+
+        function importVault(event) {
+            const file = event.target.files[0];
+            if(!file) return;
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const imported = JSON.parse(e.target.result);
+                    if(imported.history !== undefined) { state = imported; saveData(); location.reload(); } 
+                    else { alert("Invalid Vault File."); }
+                } catch(err) { alert("Corrupted Data Slop."); }
+            };
+            reader.readAsText(file);
+        }
+
+        function checkNodeMastery(exName, targetStr) {
+            if(!targetStr || !exName) return false;
+            let reqSets = 1, reqReps = 0;
+            const cleanStr = targetStr.replace('s', '');
+            if(cleanStr.includes('x')) {
+                const p = cleanStr.split('x');
+                reqSets = parseInt(p[0]) || 1; reqReps = parseInt(p[1]) || 0;
+            } else { reqReps = parseInt(cleanStr) || 0; }
+
+            let maxValidSets = 0;
+            if(Array.isArray(state.history)) {
+                for(let h of state.history) {
+                    if(h && h.logs && h.logs[exName]) {
+                        let valid = 0;
+                        const repsArray = h.logs[exName].reps || h.logs[exName];
+                        for(let r of repsArray) { if(r >= reqReps) valid++; }
+                        if(valid > maxValidSets) maxValidSets = valid;
+                    }
+                }
+            }
+            return maxValidSets >= reqSets;
+        }
+
+        function getDynamicWorkout(type) {
+            if(type === 'Rest') return [{name: 'Active Mobility', target: '1x15m'}];
+            let todayExs = [];
+            SKILL_TREES.filter(t => t.category === type).forEach(tree => {
+                let activeLevelIndex = 0; let currentUnlocked = true;
+                for(let i = 0; i < tree.levels.length; i++) {
+                    const exercises = tree.levels[i].split(' & ').map(s => {
+                        const parts = s.split('|'); return { name: (parts[0] || '').trim(), target: (parts[1] || '1x1').trim() };
+                    });
+                    if (currentUnlocked) {
+                        activeLevelIndex = i;
+                        if (!exercises.every(e => checkNodeMastery(e.name, e.target))) currentUnlocked = false; 
+                    }
+                }
+                const activeExs = tree.levels[activeLevelIndex].split(' & ').map(s => {
+                    const parts = s.split('|'); return { name: (parts[0] || '').trim(), target: (parts[1] || '1x1').trim() };
+                });
+                todayExs = todayExs.concat(activeExs);
+            });
+            return todayExs;
+        }
+
+        function updateTodayUI() {
+            const currentType = PLPCR_LOOP[state.loopIndex];
+            document.getElementById('cycle-count').innerText = `Cycle ${state.cycle}`;
+            document.getElementById('current-workout').innerText = currentType;
+            
+            const targetList = document.getElementById('today-targets');
+            if(currentType === 'Rest') {
+                targetList.innerHTML = `<div class="target-item"><span>Mandatory Rest</span><span>Recovery</span></div>`;
+            } else {
+                targetList.innerHTML = getDynamicWorkout(currentType).map(ex => `<div class="target-item"><span>${ex.name}</span><span>${ex.target}</span></div>`).join('');
+            }
+
+            const btnAdvance = document.getElementById('btn-advance');
+            if(state.canAdvance) {
+                btnAdvance.disabled = false; btnAdvance.innerText = "Advance Protocol";
+                btnAdvance.style.borderColor = "var(--accent)"; btnAdvance.style.color = "var(--accent)";
+            } else {
+                btnAdvance.disabled = true; btnAdvance.innerText = "Complete Workout to Advance";
+                btnAdvance.style.borderColor = "var(--border)"; btnAdvance.style.color = "var(--text-muted)";
+            }
+        }
+
+        function advanceProtocol() {
+            if(!state.canAdvance) return;
+            if(!confirm("Push to the next day in the sequence?")) return;
+            state.canAdvance = false; 
+            state.loopIndex++;
+            if (state.loopIndex >= PLPCR_LOOP.length) { state.loopIndex = 0; state.cycle++; }
+            saveData(); updateTodayUI(); renderProgressions();
+        }
+
+        function parseTargetString(targetStr) {
+            const isHold = targetStr.toLowerCase().includes('s') || targetStr.toLowerCase().includes('m');
+            const cleanStr = targetStr.replace('s', '').replace('m', '');
+            const parts = cleanStr.split('x');
+            if(parts.length === 2) return { sets: parseInt(parts[0]), reps: parseInt(parts[1]), isHold };
+            return { sets: 1, reps: parseInt(cleanStr) || 0, isHold };
+        }
+
+        function formatTime(seconds) {
+            const m = Math.floor(seconds / 60).toString().padStart(2, '0');
+            const s = (seconds % 60).toString().padStart(2, '0');
+            return `${m}:${s}`;
+        }
+
+        function startSessionTimer() {
+            activeSession.elapsedSeconds = 0; clearInterval(activeSession.globalTimer);
+            document.getElementById('session-timer').innerText = "00:00";
+            activeSession.globalTimer = setInterval(() => {
+                activeSession.elapsedSeconds++;
+                document.getElementById('session-timer').innerText = formatTime(activeSession.elapsedSeconds);
+            }, 1000);
+        }
+
+        function updateProgressTracker() {
+            const total = activeSession.exercises.length;
+            const current = activeSession.currentExIndex + 1;
+            document.getElementById('session-progress').innerText = `Exercise ${current} of ${total}`;
+        }
+
+        function startSession() {
+            initAudio();
+            const currentType = PLPCR_LOOP[state.loopIndex];
+            document.body.classList.add('in-session');
+            document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+            document.getElementById('view-session').classList.add('active');
+            document.getElementById('session-type').innerText = currentType.toUpperCase();
+            
+            activeSession.logs = {}; startSessionTimer();
+            
+            if(currentType === 'Rest') {
+                document.getElementById('session-progress').innerText = "Protocol: Recovery";
+                document.getElementById('session-stage').innerHTML = `<div class="exercise-title">Touch Grass</div><div class="target-rep-display">Let the CNS recover.</div><button class="btn-primary" onclick="finishActiveSession()">Complete Rest Day</button>`;
+                return;
+            }
+
+            activeSession.exercises = getDynamicWorkout(currentType).map(ex => {
+                const parsed = parseTargetString(ex.target);
+                return { name: ex.name, totalSets: parsed.sets, targetReps: parsed.reps, isHold: parsed.isHold };
+            });
+            activeSession.currentExIndex = 0; activeSession.currentSet = 1;
+            renderWarmUp();
+        }
+
+        function renderWarmUp() {
+            document.getElementById('session-progress').innerText = "Phase: Mobility Matrix";
+            const currentType = PLPCR_LOOP[state.loopIndex];
+            const warmups = WARMUP_MAP[currentType] || [];
+            let warmupHtml = warmups.map(w => `<div style="display:flex; justify-content:space-between; margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--border);"><span style="font-weight:bold; color:var(--text-main); text-align:left;">${w.name}</span><span style="color:var(--accent); min-width: 70px; text-align:right;">${w.target}</span></div>`).join('');
+            document.getElementById('session-stage').innerHTML = `<div class="exercise-title" style="margin-bottom: 20px;">Mobility Matrix</div><div style="margin-bottom: 25px; text-align: left; background: var(--bg-base); padding: 15px; border-radius: 8px; border: 1px solid var(--border);">${warmupHtml}</div><button class="btn-primary" onclick="renderActiveSet()">Start First Set</button>`;
+        }
+
+        function renderActiveSet() {
+            updateProgressTracker();
+            const ex = activeSession.exercises[activeSession.currentExIndex];
+            
+            let pastRepsStr = "No previous telemetry";
+            if(Array.isArray(state.history)) {
+                const pastSession = state.history.find(h => h && h.logs && h.logs[ex.name]);
+                if(pastSession) {
+                    const repsArray = pastSession.logs[ex.name].reps || pastSession.logs[ex.name];
+                    pastRepsStr = `Previous Session: [${repsArray.join(', ')}] ${ex.isHold ? 'secs' : 'reps'}`;
+                }
+            }
+            
+            let undoHtml = (activeSession.currentExIndex > 0 || activeSession.currentSet > 1) ? `<div style="margin-top: 25px; text-align: center;"><span onclick="undoAction()" style="color: var(--text-muted); font-size: 0.95rem; text-decoration: underline; cursor: pointer;">Undo Previous Entry</span></div>` : '';
+
+            document.getElementById('session-stage').innerHTML = `<div style="color: var(--text-muted); font-weight: bold; margin-bottom: 5px;">SET ${activeSession.currentSet} OF ${ex.totalSets}</div><div class="exercise-title">${ex.name}</div><div class="target-rep-display">Target: ${ex.targetReps}${ex.isHold ? 's' : ''}</div><div class="past-rep-display">${pastRepsStr}</div><button class="btn-primary" onclick="renderLogScreen()">Execute</button>${undoHtml}`;
+        }
+
+        function renderLogScreen() {
+            updateProgressTracker();
+            const ex = activeSession.exercises[activeSession.currentExIndex];
+            const isHold = ex.isHold;
+            
+            let logArea = '';
+            if (isHold) {
+                logArea = `
+                    <button class="btn-primary" style="background: var(--warning); color: #000; margin-bottom: 15px;" onclick="startHoldPrep(${ex.targetReps})">⏱ Start Tactical Hold (${ex.targetReps}s)</button>
+                    <input type="number" id="rep-input" class="log-input" placeholder="Or enter seconds manually">
+                `;
+            } else {
+                logArea = `<input type="number" id="rep-input" class="log-input" placeholder="Reps" autofocus>`;
+            }
+
+            document.getElementById('session-stage').innerHTML = `
+                <div class="exercise-title">Log Telemetry</div>
+                <div class="target-rep-display">${isHold ? 'Weaponize the posture.' : 'Execute and Record'}</div>
+                ${logArea}
+                <button class="btn-primary" onclick="processLog()">Save & Recover</button>
+                <div style="margin-top: 25px; text-align: center;"><span onclick="renderActiveSet()" style="color: var(--text-muted); font-size: 0.95rem; text-decoration: underline; cursor: pointer;">Cancel (Go Back)</span></div>
+            `;
+        }
+        
+        function startHoldPrep(targetSeconds) {
+            let prepTime = 5;
+            const stage = document.getElementById('session-stage');
+
+            stage.innerHTML = `
+                <div class="exercise-title" style="color: var(--warning);">LOCK IN</div>
+                <div class="timer-display" id="prep-timer" style="color: var(--warning);">00:05</div>
+                <div class="target-rep-display">Assuming posture in 5 seconds...</div>
+                <div style="margin-top: 25px; text-align: center;"><span onclick="cancelHold()" style="color: var(--text-muted); font-size: 0.95rem; text-decoration: underline; cursor: pointer;">Abort</span></div>
+            `;
+
+            clearInterval(activeSession.holdTimer);
+            activeSession.holdTimer = setInterval(() => {
+                prepTime--;
+                const el = document.getElementById('prep-timer');
+                if (el) el.innerText = `00:0${prepTime}`;
+                
+                if (prepTime > 0 && prepTime <= 3) {
+                    playBeep(800, 0.1, 'square', 0.5);
+                    try { navigator.vibrate(50); } catch(e) {}
+                } else if (prepTime <= 0) {
+                    clearInterval(activeSession.holdTimer);
+                    playBeep(1000, 0.3, 'square', 1.0);
+                    try { navigator.vibrate([200, 100, 200]); } catch(e) {}
+                    startHoldActive(targetSeconds);
+                }
+            }, 1000);
+        }
+
+        function startHoldActive(targetSeconds) {
+            activeSession.holdSeconds = 0;
+            const stage = document.getElementById('session-stage');
+            
+            stage.innerHTML = `
+                <div class="exercise-title" style="color: var(--accent);">HOLD THE LINE</div>
+                <div class="timer-display" id="active-hold-timer">00:00</div>
+                <div class="target-rep-display">Target: ${targetSeconds}s</div>
+                <button class="btn-primary" style="background: var(--danger); color: #fff; margin-top: 20px;" onclick="stopHold()">STOP & LOG</button>
+            `;
+
+            activeSession.holdTimer = setInterval(() => {
+                activeSession.holdSeconds++;
+                const el = document.getElementById('active-hold-timer');
+                if (el) {
+                    el.innerText = formatTime(activeSession.holdSeconds);
+                    if (activeSession.holdSeconds >= targetSeconds) {
+                        el.style.color = 'var(--accent)';
+                    } else {
+                        el.style.color = 'var(--text-main)';
+                    }
+                }
+            }, 1000);
+        }
+
+        function stopHold() {
+            clearInterval(activeSession.holdTimer);
+            renderLogScreen();
+            const inputEl = document.getElementById('rep-input');
+            if (inputEl) inputEl.value = activeSession.holdSeconds;
+        }
+
+        function cancelHold() {
+            clearInterval(activeSession.holdTimer);
+            renderLogScreen();
+        }
+
+        function processLog() {
+            const inputEl = document.getElementById('rep-input');
+            const rawVal = inputEl.value;
+            
+            if (rawVal.trim() === '') {
+                inputEl.style.borderColor = 'var(--danger)';
+                setTimeout(() => { if(inputEl) inputEl.style.borderColor = 'var(--border)'; }, 800); return;
+            }
+
+            const val = parseInt(rawVal) || 0;
+            const ex = activeSession.exercises[activeSession.currentExIndex];
+            
+            if(!activeSession.logs[ex.name]) activeSession.logs[ex.name] = { target: ex.targetReps, reps: [] };
+            activeSession.logs[ex.name].reps.push(val);
+
+            if (activeSession.currentSet < ex.totalSets) {
+                activeSession.currentSet++; startRestTimer(state.lastRest);
+            } else {
+                activeSession.currentExIndex++;
+                if (activeSession.currentExIndex < activeSession.exercises.length) {
+                    activeSession.currentSet = 1; startRestTimer(state.lastRest);
+                } else { renderWorkoutComplete(); }
+            }
+        }
+
+        function undoAction() {
+            clearInterval(activeSession.timer);
+            if (activeSession.currentSet > 1) {
+                activeSession.currentSet--;
+                const exName = activeSession.exercises[activeSession.currentExIndex].name;
+                if (activeSession.logs[exName]) activeSession.logs[exName].reps.pop();
+            } else if (activeSession.currentExIndex > 0) {
+                activeSession.currentExIndex--;
+                const prevEx = activeSession.exercises[activeSession.currentExIndex];
+                activeSession.currentSet = prevEx.totalSets;
+                const exName = prevEx.name;
+                if (activeSession.logs[exName]) activeSession.logs[exName].reps.pop();
+            }
+            renderLogScreen();
+        }
+
+        function setRestTime(seconds) {
+            state.lastRest = seconds; saveData();
+            startRestTimer(seconds);
+        }
+
+        function startRestTimer(seconds) {
+            activeSession.timeLeft = seconds;
+            renderRestScreen();
+            clearInterval(activeSession.timer);
+            
+            const timerEl = document.getElementById('timer-text');
+            
+            activeSession.timer = setInterval(() => {
+                activeSession.timeLeft--;
+                if(timerEl) {
+                    timerEl.innerText = formatTime(activeSession.timeLeft);
+                    if (activeSession.timeLeft <= 3 && activeSession.timeLeft > 0) {
+                        timerEl.style.color = 'var(--warning)';
+                    } else if (activeSession.timeLeft <= 0) {
+                        timerEl.style.color = 'var(--danger)';
+                    } else {
+                        timerEl.style.color = 'var(--accent)';
+                    }
+                }
+
+                if(activeSession.timeLeft <= 3 && activeSession.timeLeft > 0) {
+                    playBeep(800, 0.1, 'square', 0.5); 
+                    try { navigator.vibrate(50); } catch(e) {}
+                }
+                if (activeSession.timeLeft <= 0) {
+                    clearInterval(activeSession.timer);
+                    playBeep(880, 0.2, 'square', 1.0); 
+                    setTimeout(() => playBeep(1100, 0.4, 'square', 1.0), 250); 
+                    try { navigator.vibrate([200, 100, 200]); } catch(e) {}
+                    renderActiveSet();
+                }
+            }, 1000);
+        }
+
+        function renderRestScreen() {
+            const timeToggles = [60, 90, 120, 180].map(t => `<button class="timer-btn ${state.lastRest === t ? 'active-rest' : ''}" onclick="setRestTime(${t})">${t}s</button>`).join('');
+            document.getElementById('session-stage').innerHTML = `<div class="exercise-title">Recovery Protocol</div><div class="timer-display" id="timer-text">${formatTime(activeSession.timeLeft)}</div><div class="timer-controls">${timeToggles}</div><div class="timer-controls" style="margin-top:0;"><button class="timer-btn" onclick="addTime(30)">+30s</button><button class="timer-btn" onclick="skipRest()">Skip Rest</button></div><div style="margin-top: 15px; text-align: center;"><span onclick="undoAction()" style="color: var(--text-muted); font-size: 0.95rem; text-decoration: underline; cursor: pointer;">Undo Last Entry</span></div>`;
+        }
+
+        function addTime(seconds) { 
+            activeSession.timeLeft += seconds; 
+            const el = document.getElementById('timer-text');
+            if (el) {
+                el.innerText = formatTime(activeSession.timeLeft); 
+                el.style.color = 'var(--accent)';
+            }
+        }
+        
+        function skipRest() { clearInterval(activeSession.timer); renderActiveSet(); }
+
+        function renderWorkoutComplete() {
+            document.getElementById('session-progress').innerText = "Status: Extraction Ready";
+            document.getElementById('session-stage').innerHTML = `<div class="exercise-title" style="color: var(--accent);">Session Annihilated</div><div class="target-rep-display">All mandatory sets complete.</div><button class="btn-primary" onclick="finishActiveSession()">Return to Base</button>`;
+        }
+
+        function abortSession() {
+            clearInterval(activeSession.timer); clearInterval(activeSession.globalTimer); clearInterval(activeSession.holdTimer);
+            document.body.classList.remove('in-session');
+            document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+            document.getElementById('view-today').classList.add('active');
+        }
+
+        function finishActiveSession() {
+            clearInterval(activeSession.globalTimer); clearInterval(activeSession.holdTimer);
+            const duration = formatTime(activeSession.elapsedSeconds);
+            const workoutDone = PLPCR_LOOP[state.loopIndex];
+            const timestamp = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute:'2-digit' });
+            
+            let sessionLogs = activeSession.logs;
+            if(Object.keys(sessionLogs).length === 0) sessionLogs = { 'Rest Day': { target: 1, reps: [1] } };
+            
+            state.history.unshift({ cycle: state.cycle, type: workoutDone, date: timestamp, duration: duration, logs: sessionLogs });
+            state.canAdvance = true;
+            
+            saveData(); abortSession(); updateTodayUI(); renderHistory(); renderProgressions();
+        }
+
+        function renderProgressions() {
+            const container = document.getElementById('trees-container');
+            if(!container) return;
+            container.innerHTML = SKILL_TREES.map(tree => {
+                let html = `<div class="accordion" onclick="toggleAccordion(this)"><div class="accordion-header"><span>${tree.name}</span><span class="level-indicator"></span></div><div class="accordion-body">`;
+                let currentUnlocked = true; let highestUnlockedLevel = 1;
+
+                tree.levels.forEach((lvlStr, index) => {
+                    const exercises = lvlStr.split(' & ').map(s => { const parts = s.split('|'); return { name: (parts[0] || '').trim(), target: (parts[1] || '1x1').trim() }; });
+                    const rowClass = currentUnlocked ? 'unlocked' : 'locked';
+                    const exNames = exercises.map(e => e.name).join(' &<br>');
+                    const exTargets = exercises.map(e => e.target).join('<br>');
+                    
+                    html += `<div class="prog-item ${rowClass}"><span style="max-width:65%; line-height: 1.4;">${exNames}</span><span style="text-align:right; line-height: 1.4;">${exTargets}</span></div>`;
+                    if(currentUnlocked) {
+                        if(exercises.every(e => checkNodeMastery(e.name, e.target))) { highestUnlockedLevel = index + 2; } else { currentUnlocked = false; }
+                    }
+                });
+                html += `</div></div>`;
+                const maxLevel = Math.min(highestUnlockedLevel, tree.levels.length);
+                return html.replace('<span class="level-indicator"></span>', `<span>Lv ${maxLevel}/${tree.levels.length}</span>`);
+            }).join('');
+        }
+
+        function renderHistory() {
+            const list = document.getElementById('history-list');
+            if(!list) return;
+            if (!Array.isArray(state.history) || state.history.length === 0) {
+                list.innerHTML = '<p style="color: var(--text-muted);">No sessions recorded yet. Lock in.</p>'; return;
+            }
+            list.innerHTML = state.history.map(item => {
+                const logsHtml = Object.entries(item.logs || {}).map(([ex, data]) => {
+                    const repsArray = data.reps || data; 
+                    const target = data.target || 0;
+                    
+                    const styledReps = repsArray.map(r => {
+                        let color = 'var(--text-main)';
+                        if (target > 0) {
+                            if (r >= target) color = 'var(--accent)';
+                            else if (r >= target - 2) color = 'var(--warning)';
+                            else color = 'var(--danger)';
+                        }
+                        return `<span style="color:${color}">${r}</span>`;
+                    }).join('<span style="color:var(--text-muted)">, </span>');
+                    
+                    return `<div class="history-log-row"><span style="color:var(--text-main)">${ex}</span> <span>[${styledReps}]</span></div>`;
+                }).join('');
+
+                return `<div class="history-item"><div style="display:flex; justify-content:space-between; margin-bottom: 5px;"><strong>${item.type} <span style="font-size:0.8rem; color:var(--text-muted); margin-left: 5px;">Cycle ${item.cycle}</span></strong><div style="color: var(--text-muted); font-size: 0.85rem;">${item.date} • ⏱️ ${item.duration || 'N/A'}</div></div>${logsHtml}</div>`;
+            }).join('');
+        }
+
+        function saveData() {
+            safeSet('cali_v7_cycle', state.cycle); safeSet('cali_v7_loopIndex', state.loopIndex);
+            safeSet('cali_v7_history', JSON.stringify(state.history)); safeSet('cali_v7_canAdvance', state.canAdvance);
+            safeSet('cali_v7_lastRest', state.lastRest);
+        }
+
+        window.addEventListener('DOMContentLoaded', initApp);
+    </script>
+</body>
+</html>
