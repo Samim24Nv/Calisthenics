@@ -154,15 +154,16 @@
 
         const PLPCR_LOOP = ['Push', 'Leg', 'Pull', 'Core', 'Rest'];
         
-        const SKILL_TREES = [
-            { category: 'Push', name: "Handstand Push-Up", levels: ["Standard Push-ups|3x15", "Hindu Push-ups|3x7 & Floor Pike Push-ups|3x7 & Tripod Headstand|3x20s", "Advanced Pike Push-ups|3x7 & Hollow Body Hold|3x30s", "Chest-to-Wall Handstand|3x20s & Pirouette Bail|3x5", "Freestanding Handstand|3x20s", "Wall HSPU Negatives|3x7", "Wall Strict HSPU|3x7", "Freestanding HSPU|3x7"] },
-            { category: 'Push', name: "1-Arm Push-Up", levels: ["Diamond Push-ups|3x15", "Archer Push-ups|3x7", "Uneven / Fingertip Archer|3x7", "Incline 1-Arm Push-ups|3x7", "Floor 1-Arm Negatives|3x7", "1-Arm Push-ups|3x7"] },
-            { category: 'Leg', name: "Pistol Squat", levels: ["Normal Squats|3x20", "Lunges|3x10", "Archer Squats|3x10", "Bulgarian Split Squats|3x10", "Assisted Pistol Squats|3x7", "Pistol Squat Negatives|3x7", "Pistol Squats|3x7"] },
-            { category: 'Core', name: "L-Sit", levels: ["Hollow Body Hold|3x30s", "Leg Raises|3x10 & Scapula Dips|3x10", "Adv. Leg Raises|3x10 & Adv. Scapula Dips|3x10", "Tuck L-Sit|3x20s", "Straddle L-Sit|3x20s", "Full L-Sit|3x30s"] },
-            { category: 'Core', name: "Dragon Flag", levels: ["Hollow Hold|3x30s & Lying Leg Raises|3x7", "Tuck Reverse Crunches|3x7", "Straight-Leg Reverse Crunches|3x7", "Tuck Dragon Flag Hold|3x20s", "1-Leg Dragon Flag Hold|3x20s", "Full Dragon Flag Negatives|3x7", "Full Dragon Flag Hold|3x20s"] },
-            { category: 'Pull', name: "Muscle Up", levels: ["Pull-ups|3x7", "High Pull-ups|3x7 & Straight Dips|3x7", "Jumping Muscle Ups|3x7", "Tuck-in Muscle Up|3x7", "Strict Muscle Up|3x7"] },
-            { category: 'Pull', name: "1-Arm Pull-Up", levels: ["Pull-ups|3x7", "Archer Pull-ups|3x7 & 1-Arm Active Hang|3x20s", "1-Arm Top Hold|3x20s & 1-Arm Negatives|3x7", "1-Arm Pull-Up|3x7"] }
-        ];
+const SKILL_TREES = [
+    { category: 'Push', name: "Handstand Push-Up", levels: ["Standard Push-ups|3x15", "Hindu Push-ups|3x7 & Floor Pike Push-ups|3x7 & Tripod Headstand|3x20s", "Advanced Pike Push-ups|3x7 & Hollow Body Hold|3x30s", "Chest-to-Wall Handstand|3x20s & Pirouette Bail|3x5", "Freestanding Handstand|3x20s", "Wall HSPU Negatives|3x7", "Wall Strict HSPU|3x7", "Freestanding HSPU|3x7"] },
+    { category: 'Push', name: "1-Arm Push-Up", levels: ["Diamond Push-ups|3x15", "Archer Push-ups|3x7", "Uneven / Fingertip Archer|3x7", "Incline 1-Arm Push-ups|3x7", "Floor 1-Arm Negatives|3x7", "1-Arm Push-ups|3x7"] },
+    { category: 'Leg', name: "Pistol Squat", levels: ["Normal Squats|3x20", "Lunges|3x10", "Archer Squats|3x10", "Bulgarian Split Squats|3x10", "Assisted Pistol Squats|3x7", "Pistol Squat Negatives|3x7", "Pistol Squats|3x7"] },
+    { category: 'Leg', name: "Deficit Calf Raise", levels: ["Floor Calf Raises|3x20", "Deficit Calf Raises|3x15", "Floor 1-Leg Calf Raises|3x10", "Deficit 1-Leg Calf Raises|3x10", "Deficit 1-Leg Explosive|3x15"] },
+    { category: 'Core', name: "L-Sit", levels: ["Hollow Body Hold|3x30s", "Leg Raises|3x10 & Scapula Dips|3x10", "Adv. Leg Raises|3x10 & Adv. Scapula Dips|3x10", "Tuck L-Sit|3x20s", "Straddle L-Sit|3x20s", "Full L-Sit|3x30s"] },
+    { category: 'Core', name: "Dragon Flag", levels: ["Hollow Hold|3x30s & Lying Leg Raises|3x7", "Tuck Reverse Crunches|3x7", "Straight-Leg Reverse Crunches|3x7", "Tuck Dragon Flag Hold|3x20s", "1-Leg Dragon Flag Hold|3x20s", "Full Dragon Flag Negatives|3x7", "Full Dragon Flag Hold|3x20s"] },
+    { category: 'Pull', name: "Muscle Up", levels: ["Pull-ups|3x7", "High Pull-ups|3x7 & Straight Dips|3x7", "Jumping Muscle Ups|3x7", "Tuck-in Muscle Up|3x7", "Strict Muscle Up|3x7"] },
+    { category: 'Pull', name: "1-Arm Pull-Up", levels: ["Pull-ups|3x7", "Archer Pull-ups|3x7 & 1-Arm Active Hang|3x20s", "1-Arm Top Hold|3x20s & 1-Arm Negatives|3x7", "1-Arm Pull-Up|3x7"] }
+];
 
         const WARMUP_MAP = {
             'Push': [{name: 'Wrist Leans & Finger Pulses', target: '60s'}, {name: 'Arm Circles & Tricep Ext.', target: '15 reps'}, {name: 'Scapular Push-ups', target: '10 reps'}],
